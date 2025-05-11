@@ -60,7 +60,7 @@ app.post('/render', async (req, res) => {
     res.send(buffer);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erreur lors du rendu de l'image.' });
+    res.status(500).json({ error: "Erreur lors du rendu de l'image." });
   }
 });
 
