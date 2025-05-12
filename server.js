@@ -14,7 +14,7 @@ app.post('/render', async (req, res) => {
     return res.status(400).json({ error: 'Mermaid code manquant.' });
   }
 
-  const html = `
+const html = `
 <!DOCTYPE html>
 <html>
   <head>
@@ -32,14 +32,15 @@ app.post('/render', async (req, res) => {
     </style>
   </head>
   <body>
-    <div class="mermaid">${code}</div>
+    <pre class="mermaid" id="diagram">${code}</pre>
     <script type="module">
       import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({ startOnLoad: true });
+      mermaid.initialize({ startOnLoad: false });
+      mermaid.run().then(() => console.log("Mermaid diagram rendered"));
     </script>
   </body>
 </html>
-  `;
+`;
 
   try {
     const browser = await puppeteer.launch({
