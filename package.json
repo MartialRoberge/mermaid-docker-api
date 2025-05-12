@@ -1,7 +1,7 @@
 {
   "name": "mermaid-kroki-proxy",
   "version": "1.0.0",
-  "type": "module",              // ← pour pouvoir faire “import … from”
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
