@@ -1,112 +1,81 @@
-/* ------------------------------------------------------------------ */
-/*  server.js – Mermaid → PNG   (ES modules)                          */
-/* ------------------------------------------------------------------ */
-import express    from 'express';
+// server.js  — ES modules
+import express from 'express';
+import puppeteer from 'puppeteer';
 import bodyParser from 'body-parser';
-import puppeteer  from 'puppeteer';
-import fs         from 'node:fs/promises';          // ← utile si tu veux servir /img
-import crypto     from 'node:crypto';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+/* ────────────────────────────────────────────────────────── */
+/*  middlewares                                               */
 app.use(bodyParser.json({ limit: '2mb' }));
 
-/* ---------- utilité : génère un PNG (Buffer) ---------------------- */
-async function generatePng(code) {
-  const escaped = JSON.stringify(code);
+/* ────────────────────────────────────────────────────────── */
+/*  POST /render/base64  : code Mermaid -> PNG base-64        */
+app.post('/render/base64', async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ error: 'Mermaid code manquant.' });
+  }
 
-  const html = /* html */`
-<!DOCTYPE html><html lang="en">
+  /* échappe les backticks & antislash pour l’embed JS */
+  const safeCode = code.replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+
+  const html = `
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-  <style>html,body{margin:0;padding:20px;background:#fff;font-family:Inter,sans-serif}</style>
+  <meta charset="utf-8" />
+  <style>
+    body { margin:0; padding:20px; background:#fff; }
+  </style>
 </head>
 <body>
-  <div id="container"></div>
+  <div id="diagram"></div>
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({
-      startOnLoad:false,
-      theme:'base',
-      themeVariables:{
-        primaryColor:'#1A73E8',primaryBorderColor:'#185ABC',primaryTextColor:'#fff',
-        lineColor:'#E8EAED',textColor:'#202124',fontFamily:'Inter, sans-serif',fontSize:'14px',
-        ganttSectionFill:'#F1F3F4',ganttSectionFontColor:'#202124',ganttAxisFontSize:'12px',
-        doneTaskColor:'#5F6368',doneTaskBorderColor:'#5F6368',doneTaskTextColor:'#fff',
-        activeTaskColor:'#1A73E8',activeTaskBorderColor:'#185ABC',activeTaskTextColor:'#fff',
-        critFill:'#FCE8E6',critStroke:'#D93025'
-      }
+    mermaid.initialize({ startOnLoad:false, theme:'default' });
+    mermaid.render('graph', \`${safeCode}\`).then(({ svg }) => {
+      document.getElementById('diagram').innerHTML = svg;
     });
-    const { svg } = await mermaid.render('d', ${escaped});
-    document.getElementById('container').innerHTML = svg;
   </script>
-</body></html>`;
+</body>
+</html>
+`;
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-  await page.waitForSelector('svg', { timeout: 5_000 });
-
-  const el   = await page.$('svg');
-  const clip = await el.boundingBox();
-  const png  = await page.screenshot({ clip, type: 'png' });
-
-  await browser.close();
-  return png;
-}
-
-/* ---------- 1. Route PNG binaire (tests manuels) ------------------ */
-app.post('/render', async (req, res) => {
-  const { code = '' } = req.body;
-  if (!code.trim()) return res.status(400).json({ error:'Mermaid code manquant.' });
-
+  /* ─────────────  génération & screenshot  ─────────────── */
   try {
-    const png = await generatePng(code);
-    res.setHeader('Content-Type','image/png');
-    res.send(png);
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: process.env.CHROME_BIN || '/usr/bin/chromium-browser'
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+
+    /* on attend que le SVG soit présent */
+    await page.waitForSelector('#diagram svg', { timeout: 5000 });
+
+    const element = await page.$('#diagram svg');
+    const buffer  = await element.screenshot({ type: 'png' });
+
+    await browser.close();
+
+    /* réponse au format exigé par ChatGPT Actions */
+    return res.json({
+      image_url: { url: `data:image/png;base64,${buffer.toString('base64')}` }
+    });
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error:"Erreur lors du rendu de l'image." });
+    return res.status(500).json({ error: "Erreur lors du rendu de l'image." });
   }
 });
 
-/* ---------- 2. Route pour ChatGPT Actions (data-URL) -------------- */
-app.post('/render/base64', async (req, res) => {
-  const { code = '' } = req.body;
-  if (!code.trim()) return res.status(400).json({ error:'Mermaid code manquant.' });
-
-  try {
-    const png = await generatePng(code);
-    const b64 = png.toString('base64');
-    res.json({
-      image_url: { url: `data:image/png;base64,${buffer.toString('base64')}` }
-}); catch (err) {
-    console.error(err);
-    res.status(500).json({ error:"Erreur lors du rendu de l'image." });
-  }
-});
-
-/* ---------- (optionnel) fichier statique /img/<id>.png ------------ */
-/*
-app.post('/render/link', async (req, res) => {
-  const { code = '' } = req.body;
-  if (!code.trim()) return res.status(400).json({ error:'Mermaid code manquant.' });
-
-  const png = await generatePng(code);
-  const id  = crypto.createHash('sha256').update(code).digest('hex').slice(0,24);
-  await fs.writeFile(`/tmp/${id}.png`, png);
-  res.json({ image_url: { url: `https://mermaid-docker-api.onrender.com/img/${id}.png` }});
-});
-app.use('/img', express.static('/tmp'));
-*/
+/*  simple ping */
+app.get('/', (req, res) => res.send('Mermaid renderer API – OK'));
 
 app.listen(PORT, () =>
-  console.log(`✅  API prête : http://localhost:${PORT}`)
+  console.log(`✅  Serveur en écoute sur le port ${PORT}`)
 );
