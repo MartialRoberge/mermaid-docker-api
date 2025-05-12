@@ -1,50 +1,38 @@
-// server.js – Express + appel à Kroki
+// server.js  –  proxy minimal <client> → <kroki>
 import express from 'express';
-import bodyParser from 'body-parser';
-import { v4 as uuid } from 'uuid';          // pour un nom de fichier unique si besoin
-import fetch from 'node-fetch';             // (Node ≥18 builtin, sinon npm i node-fetch@3)
+import fetch   from 'node-fetch';   // ^3
+import { v4 as uuid } from 'uuid';
 
 const app = express();
-app.use(bodyParser.json({ limit: '200kb' }));   // le code Mermaid arrive en JSON { code: "..." }
+app.use(express.json({ limit: '1mb' }));
 
-// ----------------------------------------------------------------------------
-// Petite fonction utilitaire : encode en URL-safe base64 (spécifique à Kroki)
-function encodeMermaid(code) {
-  return Buffer.from(code, 'utf8')
-    .toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-// ----------------------------------------------------------------------------
-// Endpoint POST /render  – retourne DIRECTEMENT le PNG (octet / octet)
 app.post('/render', async (req, res) => {
   try {
     const { code } = req.body;
-    if (!code || typeof code !== 'string') {
-      return res.status(400).json({ error: 'Champ "code" manquant ou invalide.' });
+    if (!code) {
+      return res.status(400).json({ error: '`code` field missing' });
     }
 
-    // Encodage pour Kroki
-    const encoded = encodeMermaid(code);
-
-    // Appel Kroki (2 Mo max, timeout raisonnable)
-    const krokiUrl = `https://kroki.io/mermaid/png/${encoded}`;
-    const krokiResp = await fetch(krokiUrl, { timeout: 10_000 });
+    // on envoie tel quel à Kroki (JSON) ― aucune compression
+    const krokiResp = await fetch('https://kroki.io/mermaid/png', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ diagram_source: code })
+    });
 
     if (!krokiResp.ok) {
-      const txt = await krokiResp.text();
-      return res.status(502).json({ error: `Kroki error ${krokiResp.status}`, details: txt });
+      const text = await krokiResp.text();
+      return res.status(502).json({ error: `Kroki error ${krokiResp.status}`, details: text });
     }
 
-    // Flux → client
-    res.setHeader('Content-Type', 'image/png');
+    // Kroki renvoie directement un PNG ⇒ on le stream vers le client
+    res.set('Content-Type', 'image/png');
     krokiResp.body.pipe(res);
   } catch (err) {
-    console.error('Render error', err);
-    res.status(500).json({ error: 'Erreur lors du rendu de l’image.' });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur lors du rendu de l\'image.' });
   }
 });
 
-// ----------------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Mermaid proxy ready on :${PORT}`));
+app.listen(PORT, () => console.log(`Proxy Mermaid prêt sur :${PORT}`));
