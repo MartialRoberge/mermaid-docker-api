@@ -4,7 +4,7 @@ import path     from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { v4 as uuidv4 }  from 'uuid';                //  ➜  ajoute "uuid": "^9" dans package.json
 import fs       from 'node:fs/promises';
-import mermaid  from '@mermaid-js/mermaid-cli';      //  ➜  "@mermaid-js/mermaid-cli": "^10"
+import mermaid   from 'mermaid';      //  ➜  "@mermaid-js/mermaid-cli": "^10"
 import puppeteer from 'puppeteer-core';              //  ➜  "puppeteer-core": "^22"
 
 const app  = express();
