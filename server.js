@@ -48,7 +48,7 @@ app.post('/render/base64', async (req, res) => {
     const browser = await puppeteer.launch({
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      executablePath: process.env.CHROME_BIN || '/usr/bin/chromium-browser'
+      executablePath: process.env.CHROME_BIN || '/usr/bin/chromium'
     });
 
     const page = await browser.newPage();
