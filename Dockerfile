@@ -1,17 +1,19 @@
-# Dockerfile (version simple)
-FROM node:20-slim
+FROM node:18-slim
+
+# librairies chrome headless
+RUN apt-get update && apt-get install -y \
+      wget ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 \
+      libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnss3 libx11-xcb1 \
+      libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 libxss1 libxtst6 \
+      libgdk-pixbuf2.0-0 libpango-1.0-0 libpangocairo-1.0-0 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# on copie uniquement les métadonnées pour tirer profit du cache Docker
-COPY package.json ./
-
-# ↓↓↓  ICI  ↓↓↓
-RUN npm install --omit=dev      # installe puppeteer ET télécharge Chrome
-# ↑↑↑  pas « npm ci »
-
-# puis on copie le reste du code
+COPY package*.json ./
+RUN npm install --omit=dev          # pas de package-lock → pas de `npm ci`
 COPY . .
 
-EXPOSE 3000
-CMD ["node", "server.js"]
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_SKIP_DOWNLOAD=true
+
+CMD [ "node", "server.js" ]
