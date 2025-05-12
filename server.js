@@ -1,7 +1,6 @@
-// server.js  –  proxy minimal <client> → <kroki>
 import express from 'express';
-import fetch   from 'node-fetch';   // ^3
-import { v4 as uuid } from 'uuid';
+import fetch   from 'node-fetch';
+import { buffer } from 'stream/consumers';
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -9,30 +8,26 @@ app.use(express.json({ limit: '1mb' }));
 app.post('/render', async (req, res) => {
   try {
     const { code } = req.body;
-    if (!code) {
-      return res.status(400).json({ error: '`code` field missing' });
-    }
+    if (!code) return res.status(400).json({ error: '`code` manquant' });
 
-    // on envoie tel quel à Kroki (JSON) ― aucune compression
-    const krokiResp = await fetch('https://kroki.io/mermaid/png', {
+    const kroki = await fetch('https://kroki.io/mermaid/png', {
       method : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body   : JSON.stringify({ diagram_source: code })
     });
 
-    if (!krokiResp.ok) {
-      const text = await krokiResp.text();
-      return res.status(502).json({ error: `Kroki error ${krokiResp.status}`, details: text });
+    if (!kroki.ok) {
+      return res.status(502).json({ error: `Kroki ${kroki.status}`, details: await kroki.text() });
     }
 
-    // Kroki renvoie directement un PNG ⇒ on le stream vers le client
-    res.set('Content-Type', 'image/png');
-    krokiResp.body.pipe(res);
+    // on lit le flux PNG puis on encode
+    const bin = await buffer(kroki.body);
+    const b64 = bin.toString('base64');
+    return res.json({ image: `data:image/png;base64,${b64}` });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur lors du rendu de l\'image.' });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Proxy Mermaid prêt sur :${PORT}`));
+app.listen(process.env.PORT || 3000);
