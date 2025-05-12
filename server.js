@@ -1,33 +1,29 @@
-import express from 'express';
-import fetch   from 'node-fetch';
-import { buffer } from 'stream/consumers';
+// server.js  (extrait ultra-simplifié)
+import fs       from "node:fs/promises";
+import path     from "node:path";
+import { v4 as uuid }  from "uuid";
+import mermaid   from "@mermaid-js/mermaid-cli";
+import express   from "express";
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json());
 
-app.post('/render', async (req, res) => {
+// dossier public → servi statiquement par Render
+app.use("/img", express.static("public/img"));
+
+app.post("/render", async (req, res) => {
   try {
-    const { code } = req.body;
-    if (!code) return res.status(400).json({ error: '`code` manquant' });
+    const { code } = req.body;                         // code Mermaid reçu
+    const id   = uuid();                               // nom unique d’image
+    const file = path.join("public", "img", `${id}.png`);
 
-    const kroki = await fetch('https://kroki.io/mermaid/png', {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ diagram_source: code })
-    });
+    // génère le PNG dans ./public/img/<id>.png
+    await mermaid.render( id, code, { output: file } );
 
-    if (!kroki.ok) {
-      return res.status(502).json({ error: `Kroki ${kroki.status}`, details: await kroki.text() });
-    }
-
-    // on lit le flux PNG puis on encode
-    const bin = await buffer(kroki.body);
-    const b64 = bin.toString('base64');
-    return res.json({ image: `data:image/png;base64,${b64}` });
+    // répond juste l’URL  ⇢ sera servie en binaire par Express
+    res.json({ url: `${req.protocol}://${req.get("host")}/img/${id}.png` });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erreur lors du rendu de l\'image.' });
+    res.status(500).json({ error: "render-error" });
   }
 });
-
-app.listen(process.env.PORT || 3000);
