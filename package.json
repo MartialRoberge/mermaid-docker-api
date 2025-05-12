@@ -1,13 +1,13 @@
 {
   "name": "mermaid-kroki-proxy",
   "version": "1.0.0",
-  "type": "module",              // ← autorise "import ..."
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@mermaid-js/mermaid-cli": "^10.4.0",   // ← NEW
+    "@mermaid-js/mermaid-cli": "^10.4.0",
     "express": "^4.19.2",
     "uuid": "^9.0.1"
   }
