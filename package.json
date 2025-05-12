@@ -2,7 +2,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "body-parser": "^1.20.2",
-    "puppeteer": "^22.5.0"   // <-- version complète, pas puppeteer-core
+    "puppeteer": "^22.5.0"
   },
   "type": "module"
 }
