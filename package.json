@@ -1,8 +1,9 @@
 {
+  "type": "module",
   "dependencies": {
-    "express": "^4.19.2",
-    "body-parser": "^1.20.2",
-    "puppeteer": "^22.5.0"
-  },
-  "type": "module"
+    "express": "^4.19.0",
+    "@mermaid-js/mermaid-cli": "^10.9.0",
+    "puppeteer-core": "^22.10.0",
+    "uuid": "^9.0.1"
+  }
 }
