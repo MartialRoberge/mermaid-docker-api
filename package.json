@@ -2,8 +2,8 @@
   "type": "module",
   "dependencies": {
     "express": "^4.19.0",
-    "@mermaid-js/mermaid-cli": "^10.9.0",
     "puppeteer-core": "^22.10.0",
+    "mermaid": "^10.9.0",
     "uuid": "^9.0.1"
   }
 }
