@@ -1,10 +1,16 @@
-FROM node:18-alpine
+# ───── Dockerfile ─────
+FROM node:18-slim
 
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev      # ← pas besoin de package-lock.json
 
+# ① on copie uniquement les fichiers de dépendances
+COPY package*.json ./
+
+# ② on installe (ou ci si tu as un package-lock.json)
+RUN npm install --omit=dev          # télécharge express, cors, mermaid-cli…
+
+# ③ on ajoute tout le reste (server.js, etc.)
 COPY . .
 
-EXPOSE 8080
+# ④ lance le serveur
 CMD ["npm", "start"]
