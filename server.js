@@ -85,8 +85,9 @@ app.post('/render/base64', async (req, res) => {
   try {
     const png = await generatePng(code);
     const b64 = png.toString('base64');
-    res.json({ image_url: { url: `data:image/png;base64,${b64}` } });
-  } catch (err) {
+    res.json({
+      image_url: { url: `data:image/png;base64,${buffer.toString('base64')}` }
+}); catch (err) {
     console.error(err);
     res.status(500).json({ error:"Erreur lors du rendu de l'image." });
   }
