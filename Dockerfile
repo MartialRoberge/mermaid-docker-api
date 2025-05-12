@@ -1,16 +1,20 @@
-# ───── Dockerfile ─────
-FROM node:18-slim
+# ─── base avec Chrome + dépendances déjà incluses ────────────────
+FROM ghcr.io/puppeteer/puppeteer:20.7.4
+
+# ----------------------------------------------------------------
+#  ce tag contient :
+#    • node 20.x
+#    • chromium + toutes les bibliothèques GTK/GLib
+#    • fontconfig, nss, etc.
+# ----------------------------------------------------------------
 
 WORKDIR /app
 
-# ① on copie uniquement les fichiers de dépendances
+# dépendances Node
 COPY package*.json ./
+RUN npm install --omit=dev        # ou pnpm / yarn au choix
 
-# ② on installe (ou ci si tu as un package-lock.json)
-RUN npm install --omit=dev          # télécharge express, cors, mermaid-cli…
-
-# ③ on ajoute tout le reste (server.js, etc.)
+# ton code
 COPY . .
 
-# ④ lance le serveur
-CMD ["npm", "start"]
+CMD ["node","server.js"]
