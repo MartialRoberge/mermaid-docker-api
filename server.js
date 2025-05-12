@@ -1,82 +1,50 @@
-// server.js  (ES-Modules)
+// server.js – Express + appel à Kroki
 import express from 'express';
-import path     from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { v4 as uuidv4 }  from 'uuid';                //  ➜  ajoute "uuid": "^9" dans package.json
-import fs       from 'node:fs/promises';
-import mermaid   from 'mermaid';      //  ➜  "@mermaid-js/mermaid-cli": "^10"
-import puppeteer from 'puppeteer-core';              //  ➜  "puppeteer-core": "^22"
+import bodyParser from 'body-parser';
+import { v4 as uuid } from 'uuid';          // pour un nom de fichier unique si besoin
+import fetch from 'node-fetch';             // (Node ≥18 builtin, sinon npm i node-fetch@3)
 
-const app  = express();
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.use(bodyParser.json({ limit: '200kb' }));   // le code Mermaid arrive en JSON { code: "..." }
 
-/* ---------- middlewares ---------- */
-app.use(express.json({ limit: '1mb' }));
-// on sert /tmp en statique pour exposer les PNG
-app.use('/tmp', express.static('/tmp'));
+// ----------------------------------------------------------------------------
+// Petite fonction utilitaire : encode en URL-safe base64 (spécifique à Kroki)
+function encodeMermaid(code) {
+  return Buffer.from(code, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_');
+}
 
-/* ---------- POST /render ---------- */
+// ----------------------------------------------------------------------------
+// Endpoint POST /render  – retourne DIRECTEMENT le PNG (octet / octet)
 app.post('/render', async (req, res) => {
-  const code = req.body?.code;
-  if (!code || typeof code !== 'string') {
-    return res.status(400).json({ error: '`code` (string) manquant' });
-  }
-
-  /* 1. validation Mermaid -------------------------------------------------- */
   try {
-    mermaid.parse(code);                 // lève si syntaxe invalide
+    const { code } = req.body;
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ error: 'Champ "code" manquant ou invalide.' });
+    }
+
+    // Encodage pour Kroki
+    const encoded = encodeMermaid(code);
+
+    // Appel Kroki (2 Mo max, timeout raisonnable)
+    const krokiUrl = `https://kroki.io/mermaid/png/${encoded}`;
+    const krokiResp = await fetch(krokiUrl, { timeout: 10_000 });
+
+    if (!krokiResp.ok) {
+      const txt = await krokiResp.text();
+      return res.status(502).json({ error: `Kroki error ${krokiResp.status}`, details: txt });
+    }
+
+    // Flux → client
+    res.setHeader('Content-Type', 'image/png');
+    krokiResp.body.pipe(res);
   } catch (err) {
-    return res.status(400).json({
-      error: 'Syntaxe Mermaid invalide',
-      details: err.message
-    });
+    console.error('Render error', err);
+    res.status(500).json({ error: 'Erreur lors du rendu de l’image.' });
   }
-
-  /* 2. génération ---------------------------------------------------------- */
-  const tmpFile = `/tmp/${uuidv4()}.png`;
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      // Render installe chrome stable dans /usr/bin/chromium-browser
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-
-    // page HTML minimal avec Mermaid JS chargé depuis un CDN
-    const html = /* html */ `
-      <!DOCTYPE html><html>
-      <head>
-        <meta charset="utf-8" />
-        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs" type="module"></script>
-        <style>body{margin:0}svg{width:100%;height:auto}</style>
-      </head>
-      <body>
-        <div class="mermaid">${code}</div>
-      </body>
-      </html>`;
-
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    // on attend le rendu
-    await page.waitForSelector('svg', { timeout: 10_000 });
-
-    const svg = await page.$('svg');
-    await svg.screenshot({ path: tmpFile, type: 'png' });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Erreur lors du rendu de l\'image.' });
-  } finally {
-    await browser?.close().catch(() => {});
-  }
-
-  /* 3. réponse ------------------------------------------------------------- */
-  const publicUrl = `${req.protocol}://${req.get('host')}/tmp/${path.basename(tmpFile)}`;
-  return res.json({ image_url: { url: publicUrl } });
 });
 
-/* ---------- GET /healthz (optionnel) ---------- */
-app.get('/healthz', (_, res) => res.send('ok'));
-
-/* ---------- start ---------- */
+// ----------------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Mermaid API ready on :${PORT}`));
+app.listen(PORT, () => console.log(`Mermaid proxy ready on :${PORT}`));
