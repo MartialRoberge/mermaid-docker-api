@@ -1,4 +1,6 @@
-# Utilise un tag stable minifié mais complet (bibliothèques Puppeteer compatibles)
+#=========================
+# Dockerfile (version 1)
+#=========================
 FROM node:18-slim
 
 # 1. Dépendances nécessaires à Chromium
@@ -14,7 +16,7 @@ RUN apt-get update && \
 # 2. Copie et installation
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev     # plus rapide et reproductible
+RUN npm install --omit=dev          # <— remplace npm ci
 COPY . .
 
 EXPOSE 3000
