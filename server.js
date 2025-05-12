@@ -1,29 +1,54 @@
-// server.js  (extrait ultra-simplifié)
-import fs       from "node:fs/promises";
-import path     from "node:path";
-import { v4 as uuid }  from "uuid";
-import mermaid   from "@mermaid-js/mermaid-cli";
-import express   from "express";
+/* ─────────────── server.js (ES modules, Node ≥ 18) ───────────────
+   - attend un body JSON : { "code": "...mermaid..." , "format":"png|svg" }
+   - renvoie directement le fichier généré  ⇒ pas de base64, affichage immédiat
+   - dépendances : express, cors, @mermaid-js/mermaid-cli
+   - pense à avoir  "type": "module"  dans ton package.json
+────────────────────────────────────────────────────────────────── */
+
+import express           from 'express';
+import cors              from 'cors';
+import { run }           from '@mermaid-js/mermaid-cli';  // pas de « default » !
+import { randomUUID }    from 'crypto';
+import fs                from 'fs/promises';
 
 const app = express();
-app.use(express.json());
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
 
-// dossier public → servi statiquement par Render
-app.use("/img", express.static("public/img"));
+// Ping ► GET /
+app.get('/', (_, res) => res.send('✅ Mermaid proxy up & running'));
 
-app.post("/render", async (req, res) => {
+// POST /render  →  retourne l’image (png ou svg)
+app.post('/render', async (req, res) => {
+  const { code, format = 'png' } = req.body || {};
+
+  if (!code) return res.status(400).json({ error: 'Missing "code" field' });
+  if (!['png', 'svg'].includes(format)) {
+    return res.status(400).json({ error: 'format must be "png" or "svg"' });
+  }
+
+  const file = `/tmp/${randomUUID()}.${format}`;
+
   try {
-    const { code } = req.body;                         // code Mermaid reçu
-    const id   = uuid();                               // nom unique d’image
-    const file = path.join("public", "img", `${id}.png`);
+    // Génère le diagramme
+    await run(code, {
+      output: file,
+      puppeteerConfig: { headless: true }
+    });
 
-    // génère le PNG dans ./public/img/<id>.png
-    await mermaid.render( id, code, { output: file } );
-
-    // répond juste l’URL  ⇢ sera servie en binaire par Express
-    res.json({ url: `${req.protocol}://${req.get("host")}/img/${id}.png` });
+    // 🔹 1) pré-visualisation immédiate
+    // 🔹 2) l’utilisateur peut « Enregistrer l’image sous… » ou tu peux remplacer
+    //       sendFile par download() pour forcer le téléchargement.
+    res.sendFile(file, err => {
+      if (err) res.status(500).json({ error: String(err) });
+      fs.unlink(file).catch(() => {});   // ménage
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "render-error" });
+    res.status(500).json({ error: String(err) });
   }
 });
+
+// Lancement serveur
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`🖼️  Mermaid proxy listening on :${PORT}`));
