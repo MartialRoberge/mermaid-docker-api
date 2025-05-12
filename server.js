@@ -52,6 +52,12 @@ const html = `
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
 
+  // Attendre que le diagramme Mermaid soit rendu
+    await page.waitForFunction(() => {
+      const el = document.querySelector('.mermaid');
+      return el && el.querySelector('svg');
+    }, { timeout: 5000 });
+
     const element = await page.$('.mermaid');
     const buffer = await element.screenshot();
 
